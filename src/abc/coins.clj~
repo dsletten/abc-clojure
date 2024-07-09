@@ -1,0 +1,470 @@
+;;;;
+;;;;
+;;;;   Clojure feels like a general-purpose language beamed back
+;;;;     from the near future.
+;;;;   -- Stu Halloway
+;;;;
+;;;;   Name:               coins.clj
+;;;;
+;;;;   Started:            Sun Mar  7 18:05:56 2021
+;;;;   Modifications:
+;;;;
+;;;;   Purpose:
+;;;;
+;;;;
+;;;;
+;;;;   Calling Sequence:
+;;;;
+;;;;
+;;;;   Inputs:
+;;;;
+;;;;   Outputs:
+;;;;
+;;;;   Example:
+;;;;
+;;;;   Notes:
+;;;;
+;;;;
+
+(ns coins
+  (:use clojure.test
+        [clojure.pprint :only (cl-format)])
+  (:import))
+
+(defn toss-coin []
+  (case (rand-int 2)
+    0 :head
+    1 :tail))
+
+(defn toss-coin []
+(let [toss  (case (rand-int 2)
+    0 :head
+    1 :tail)]
+  (println toss)
+  toss))
+
+(defn percentage [bin total]
+  (cl-format false "~,2F%" (* 100.0 (/ bin total))))
+
+(defn trial
+  ([] (trial 100))
+  ([count] (letfn [(toss [i heads tails heads-run max-heads-run tails-run max-tails-run]
+                     (cond (zero? i) `(:heads ~heads (~(percentage heads count)) run ~(max heads-run max-heads-run)
+                                       :tails ~tails (~(percentage tails count)) run ~(max tails-run max-tails-run))
+                           :else (case (toss-coin)
+                                   :head (toss (dec i) (inc heads) tails (inc heads-run) max-heads-run 0 (max tails-run max-tails-run))
+                                   :tail (toss (dec i) heads (inc tails) 0 (max heads-run max-heads-run) (inc tails-run) max-tails-run))))]
+             (toss count 0 0 0 0 0 0))))
+
+
+
+;;;
+;;;   Workshop ch. 5
+;;;   
+(defn coin-runs [coins]
+  (:result (reduce (fn [{:keys [run result]} coin]
+                     (if (and (seq run)
+                              (or (and (= (first run) coin :head))
+                                  (and (= (first run) coin :tail))))
+                       {:run (conj run coin)
+                        :result (conj result [coin (count run)])}
+                       {:run [coin]
+                        :result (conj result [coin 0])}))
+                   {:run [] :result []}
+                   coins)))
+
+
+
+
+
+
+
+;;;
+;;;   FSM
+;;;   SBCL does TCO on this whole damn thing!!
+;;;   * (trial 10000000)
+;;;   (:HEADS 5000509 ("50.01%") RUN 23 :TAILS 4999491 ("49.99%") RUN 23 -- 13)
+;;;   * (trial 100000000)
+;;;   (:HEADS 49999983 ("50.00%") RUN 25 :TAILS 50000017 ("50.00%") RUN 27 -- 13)
+;;;   * (trial 1000000000)
+;;;   (:HEADS 500010366 ("50.00%") RUN 28 :TAILS 499989634 ("50.00%") RUN 29 -- 15)
+;;;   
+;; (defun trial (&optional (count 100))
+;;   (assert (plusp count))
+;;   (labels ((start (i)
+;;              (ecase (toss-coin)
+;;                (:head (h0 (1- i)))
+;;                (:tail (t0 (1- i)))) )
+;;            (stats (heads tails max-heads-run max-tails-run &optional (max-alt-run 0))
+;;              `(:heads ,heads (,(percentage heads count)) run ,max-heads-run
+;;                :tails ,tails (,(percentage tails count)) run ,max-tails-run -- ,max-alt-run))
+;;            (h0 (i)
+;;              (cond ((zerop i) (stats 1 0 1 0))
+;;                    (t (ecase (toss-coin)
+;;                         (:head (hh (1- i) 2 0 2 0 0 0))
+;;                         (:tail (ht (1- i) 1 1 1 1 0 1 0 :alt-run-type :ht)))) ))
+;;            (t0 (i)
+;;              (cond ((zerop i) (stats 0 1 0 1))
+;;                    (t (ecase (toss-coin)
+;;                         (:head (th (1- i) 1 1 1 0 1 1 0 :alt-run-type :th))
+;;                         (:tail (tt (1- i) 0 2 0 2 0 0)))) ))
+;;            (hh (i heads tails heads-run max-heads-run max-tails-run max-alt-run)
+;;              (cond ((zerop i) (stats heads tails (max heads-run max-heads-run) max-tails-run max-alt-run))
+;;                    (t (ecase (toss-coin)
+;;                         (:head (hh (1- i) (1+ heads) tails (1+ heads-run) max-heads-run max-tails-run max-alt-run))
+;;                         (:tail (ht (1- i) heads (1+ tails) (max heads-run max-heads-run) 1 max-tails-run 1 max-alt-run :alt-run-type :ht)))) ))
+;;            (ht (i heads tails max-heads-run tails-run max-tails-run alt-run max-alt-run &key alt-run-type)
+;;              (cond ((zerop i) (stats heads tails max-heads-run (max tails-run max-tails-run) (max alt-run max-alt-run))) ; MAX tails unnecessary???? Only corner case: HT, HHT, HHHT, ...
+;;                    (t (ecase (toss-coin)
+;;                         (:head (th (1- i) (1+ heads) tails 1 max-heads-run (max tails-run max-tails-run) (ecase alt-run-type (:th (1+ alt-run)) (:ht alt-run)) max-alt-run :alt-run-type alt-run-type))
+;;                         (:tail (tt (1- i) heads (1+ tails) max-heads-run (1+ tails-run) max-tails-run (max alt-run max-alt-run)))) )))
+;;            (th (i heads tails heads-run max-heads-run max-tails-run alt-run max-alt-run &key alt-run-type)
+;;              (cond ((zerop i) (stats heads tails (max heads-run max-heads-run) max-tails-run (max alt-run max-alt-run))) ; MAX heads unnecessary????
+;;                    (t (ecase (toss-coin)
+;;                         (:head (hh (1- i) (1+ heads) tails (1+ heads-run) max-heads-run max-tails-run (max alt-run max-alt-run)))
+;;                         (:tail (ht (1- i) heads (1+ tails) (max heads-run max-heads-run) 1 max-tails-run (ecase alt-run-type (:ht (1+ alt-run)) (:th alt-run)) max-alt-run :alt-run-type alt-run-type)))) ))
+;;            (tt (i heads tails max-heads-run tails-run max-tails-run max-alt-run)
+;;              (cond ((zerop i) (stats heads tails max-heads-run (max tails-run max-tails-run) max-alt-run))
+;;                    (t (ecase (toss-coin)
+;;                         (:head (th (1- i) (1+ heads) tails 1 max-heads-run (max tails-run max-tails-run) 1 max-alt-run :alt-run-type :th))
+;;                         (:tail (tt (1- i) heads (1+ tails) max-heads-run (1+ tails-run) max-tails-run max-alt-run)))) )))
+;;     (start count)))
+
+;; ;; - DO loop with explicit state param: H0 T0 HH ...
+;; ;; - TAGBODY states
+;; (defun trial (&optional (count 100))
+;;   (assert (plusp count))
+;;   (let ((heads 0)
+;;         (tails 0)
+;;         (heads-run 0)
+;;         (max-heads-run 0)
+;;         (tails-run 0)
+;;         (max-tails-run 0)
+;;         (alt-run 0)
+;;         (max-alt-run 0))
+;;     (labels ((start (i)
+;;                (ecase (toss-coin)
+;;                  (:head (incf heads) (incf heads-run) (h0 (1- i)))
+;;                  (:tail (incf tails) (incf tails-run) (t0 (1- i)))) )
+;;              (stats ()
+;;                `(:heads ,heads (,(percentage heads count)) run ,max-heads-run
+;;                  :tails ,tails (,(percentage tails count)) run ,max-tails-run -- ,max-alt-run))
+;;              (h0 (i)
+;;                (cond ((zerop i) (stats))
+;;                      (t (ecase (toss-coin)
+;;                           (:head (incf heads) (incf heads-run) (hh (1- i)))
+;;                           (:tail (incf tails) (setf max-heads-run (max heads-run max-heads-run)) (setf heads-run 0 tails-run 1) (incf alt-run) (ht (1- i) :alt-run-type :ht)))) ))
+;;              (t0 (i)
+;;                (cond ((zerop i) (stats))
+;;                      (t (ecase (toss-coin)
+;;                           (:head (incf heads) (setf max-tails-run (max tails-run max-tails-run)) (setf heads-run 1 tails-run 0) (incf alt-run) (th (1- i) :alt-run-type :th))
+;;                           (:tail (incf tails) (incf tails-run) (tt (1- i)))) )))
+;;              (hh (i)
+;;                (cond ((zerop i) (setf max-heads-run (max heads-run max-heads-run)) (stats))
+;;                      (t (ecase (toss-coin)
+;;                           (:head (incf heads) (incf heads-run) (hh (1- i)))
+;;                           (:tail (incf tails) (setf max-heads-run (max heads-run max-heads-run)) (setf heads-run 0 tails-run 1) (setf alt-run 1) (ht (1- i) :alt-run-type :ht)))) ))
+;;              (ht (i &key alt-run-type)
+;;                (cond ((zerop i) (setf max-tails-run (max tails-run max-tails-run)) (setf max-alt-run (max alt-run max-alt-run)) (stats))
+;;                      (t (ecase (toss-coin)
+;;                           (:head (incf heads) (setf max-tails-run (max tails-run max-tails-run)) (setf heads-run 1 tails-run 0) (when (eq alt-run-type :th) (incf alt-run)) (th (1- i) :alt-run-type alt-run-type))
+;;                           (:tail (incf tails) (incf tails-run) (setf max-alt-run (max alt-run max-alt-run)) (tt (1- i)))) )))
+;;              (th (i &key alt-run-type)
+;;                (cond ((zerop i) (setf max-heads-run (max heads-run max-heads-run)) (setf max-alt-run (max alt-run max-alt-run)) (stats))
+;;                      (t (ecase (toss-coin)
+;;                           (:head (incf heads) (incf heads-run) (setf max-alt-run (max alt-run max-alt-run)) (hh (1- i)))
+;;                           (:tail (incf tails) (setf max-heads-run (max heads-run max-heads-run)) (setf heads-run 0 tails-run 1) (when (eq alt-run-type :ht) (incf alt-run)) (ht (1- i) :alt-run-type alt-run-type)))) ))
+;;              (tt (i)
+;;                (cond ((zerop i) (setf max-tails-run (max tails-run max-tails-run)) (stats))
+;;                      (t (ecase (toss-coin)
+;;                           (:head (incf heads) (setf max-tails-run (max tails-run max-tails-run)) (setf heads-run 1 tails-run 0) (setf alt-run 1) (th (1- i) :alt-run-type :th))
+;;                           (:tail (incf tails) (incf tails-run) (tt (1- i)))) ))))
+;;       (start count))))
+
+
+;; ;;;
+;; ;;;    Different approach below.
+;; ;;;
+;; ;;;
+;; ;;;    File feeder reads from file (Compressed? 1010110)
+;; ;;;
+;; ;;;    STATS object records runs.
+
+;; (defclass tosser ()
+;;   ((state :initform (make-random-state t)))
+;;   (:documentation "Generates a random coin toss producing either the keyword :HEAD or :TAIL."))
+
+;; (defun toss (tosser)
+;;   (with-slots (state) tosser
+;;     (if (zerop (random 2 state)) :head :tail)))
+
+;; (defclass feeder ()
+;;   ((count :initform 0)
+;;    (heads :initform 0)
+;;    (tails :initform 0))
+;;   (:documentation "A FEEDER provides a stream of coin tosses until it is exhausted. It can be reset to produce (in most implementations) the same stream again."))
+
+;; (defgeneric count (feeder)
+;;   (:documentation "Return the number of tosses already produced by this feeder."))
+;; (defmethod count ((f feeder))
+;;   (with-slots (count) f
+;;     (values count (exhaustedp f))))
+
+;; (defgeneric heads (feeder)
+;;   (:documentation "Return the number of heads tosses that have been produced by this feeder."))
+;; (defmethod heads ((f feeder))
+;;   (with-slots (heads) f
+;;     (values heads (exhaustedp f))))
+
+;; (defgeneric tails (feeder)
+;;   (:documentation "Return the number of tails tosses that have been produced by this feeder."))
+;; (defmethod tails ((f feeder))
+;;   (with-slots (tails) f
+;;     (values tails (exhaustedp f))))
+
+;; (defgeneric feed (feeder)
+;;   (:documentation "Feed one coin toss to the consumer."))
+;; (defmethod feed :around ((f feeder))
+;;   (if (exhaustedp f)
+;;       (error "Feeder is exhausted.")
+;;       (with-slots (count heads tails) f
+;;         (let ((toss (call-next-method)))
+;;           (incf count)
+;;           (ecase toss
+;;             (:head (incf heads))
+;;             (:tail (incf tails)))
+;;           toss))))
+
+;; (defgeneric exhaustedp (feeder)
+;;   (:documentation "Have all coin tosses from this FEEDER been consumed?"))
+
+;; (defgeneric reset (feeder)
+;;   (:documentation "Return this feeder to its initial state in order to provide (in most implementations) the same stream again."))
+;; (defmethod reset ((f feeder))
+;;   (with-slots (tosser count heads tails) f
+;;     (setf count 0 heads 0 tails 0)))
+  
+;; (defclass random-feeder (feeder)
+;;   ((tosser :initform (make-instance 'tosser))
+;;    (limit :initarg :count))
+;;   (:documentation "Produces a random sequence of LIMIT coin tosses. Upon reset will produce the same number although the exact sequence will be different."))
+
+;; (defmethod feed ((f random-feeder))
+;;   (with-slots (tosser) f
+;;     (toss tosser)))
+
+;; (defmethod exhaustedp ((f random-feeder))
+;;   (with-slots (count limit) f
+;;     (= count limit)))
+
+;; (defclass list-feeder (feeder)
+;;   ((elements :initarg :elements)
+;;    (remaining))
+;;   (:documentation "Produces a fixed sequence of coin tosses. The sequence is either pre-determined if a list is provided or generated on demand if a count is provided."))
+
+;; (defmethod initialize-instance :after ((f list-feeder) &rest initargs &key count)
+;;   (declare (ignore initargs))
+;;   (with-slots (elements remaining) f
+;;     (unless (null count)
+;;       (let ((tosser (make-instance 'tosser)))
+;;         (setf elements (loop repeat count collect (toss tosser)))) )
+;;     (setf remaining elements)))
+
+;; (defmethod feed ((f list-feeder))
+;;   (with-slots (remaining) f
+;;     (prog1 (first remaining)
+;;       (setf remaining (rest remaining)))) )
+
+;; (defmethod exhaustedp ((f list-feeder))
+;;   (with-slots (remaining) f
+;;     (null remaining)))
+
+;; (defmethod reset ((f list-feeder))
+;;   (with-slots (elements remaining) f
+;;     (setf remaining elements)
+;;     (call-next-method)))
+
+;; ;; (defun trial (feeder)
+;; ;;   (assert (not (exhaustedp feeder)))
+;; ;;   (labels ((start ()
+;; ;;              (ecase (feed feeder)
+;; ;;                (:head (h0))
+;; ;;                (:tail (t0))))
+;; ;;            (stats (max-heads-run max-tails-run &optional (max-alt-run 0))
+;; ;;              (let ((heads (heads feeder))
+;; ;;                    (tails (tails feeder))
+;; ;;                    (count (count feeder)))
+;; ;;                `(:heads ,heads (,(percentage heads count)) run ,max-heads-run
+;; ;;                  :tails ,tails (,(percentage tails count)) run ,max-tails-run -- ,max-alt-run)))
+;; ;;            (h0 ()
+;; ;;              (cond ((exhaustedp feeder) (stats 1 0))
+;; ;;                    (t (ecase (feed feeder)
+;; ;;                         (:head (hh 2 0 0 0))
+;; ;;                         (:tail (ht 1 1 0 1 0 :alt-run-type :ht)))) ))
+;; ;;            (t0 ()
+;; ;;              (cond ((exhaustedp feeder) (stats 0 1))
+;; ;;                    (t (ecase (feed feeder)
+;; ;;                         (:head (th 1 0 1 1 0 :alt-run-type :th))
+;; ;;                         (:tail (tt 0 2 0 0)))) ))
+;; ;;            (hh (heads-run max-heads-run max-tails-run max-alt-run)
+;; ;;              (cond ((exhaustedp feeder) (stats (max heads-run max-heads-run) max-tails-run max-alt-run))
+;; ;;                    (t (ecase (feed feeder)
+;; ;;                         (:head (hh (1+ heads-run) max-heads-run max-tails-run max-alt-run))
+;; ;;                         (:tail (ht (max heads-run max-heads-run) 1 max-tails-run 1 max-alt-run :alt-run-type :ht)))) ))
+;; ;;            (ht (max-heads-run tails-run max-tails-run alt-run max-alt-run &key alt-run-type)
+;; ;;              (cond ((exhaustedp feeder) (stats max-heads-run (max tails-run max-tails-run) (max alt-run max-alt-run))) ; MAX tails unnecessary???? Only corner case: HT, HHT, HHHT, ...
+;; ;;                    (t (ecase (feed feeder)
+;; ;;                         (:head (th 1 max-heads-run (max tails-run max-tails-run) (ecase alt-run-type (:th (1+ alt-run)) (:ht alt-run)) max-alt-run :alt-run-type alt-run-type))
+;; ;;                         (:tail (tt max-heads-run (1+ tails-run) max-tails-run (max alt-run max-alt-run)))) )))
+;; ;;            (th (heads-run max-heads-run max-tails-run alt-run max-alt-run &key alt-run-type)
+;; ;;              (cond ((exhaustedp feeder) (stats (max heads-run max-heads-run) max-tails-run (max alt-run max-alt-run))) ; MAX heads unnecessary????
+;; ;;                    (t (ecase (feed feeder)
+;; ;;                         (:head (hh (1+ heads-run) max-heads-run max-tails-run (max alt-run max-alt-run)))
+;; ;;                         (:tail (ht (max heads-run max-heads-run) 1 max-tails-run (ecase alt-run-type (:ht (1+ alt-run)) (:th alt-run)) max-alt-run :alt-run-type alt-run-type)))) ))
+;; ;;            (tt (max-heads-run tails-run max-tails-run max-alt-run)
+;; ;;              (cond ((exhaustedp feeder) (stats max-heads-run (max tails-run max-tails-run) max-alt-run))
+;; ;;                    (t (ecase (feed feeder)
+;; ;;                         (:head (th 1 max-heads-run (max tails-run max-tails-run) 1 max-alt-run :alt-run-type :th))
+;; ;;                         (:tail (tt max-heads-run (1+ tails-run) max-tails-run max-alt-run)))) )))
+;; ;;     (start)))
+
+;; (defclass run-statistics ()
+;;   ((current-heads-run :initform 0)
+;;    (max-heads-run :initform 0)
+;;    (current-tails-run :initform 0)
+;;    (max-tails-run :initform 0)
+;;    (current-alt-run :initform 0)
+;;    (max-alt-run :initform 0)
+;;    (alt-run-type :initform nil)))
+
+;; (defun start-heads-run (run-statistics &key start-alt-run)
+;;   (with-slots (current-heads-run current-tails-run max-tails-run current-alt-run alt-run-type) run-statistics
+;;     (setf max-tails-run (max current-tails-run max-tails-run)
+;;           current-tails-run 0
+;;           current-heads-run 1)
+;;     (if (null start-alt-run)
+;;         (when (eq alt-run-type :th) (incf current-alt-run))
+;;         (setf current-alt-run 1 alt-run-type start-alt-run))))
+
+;; (defun start-tails-run (run-statistics &key start-alt-run)
+;;   (with-slots (current-heads-run current-tails-run max-heads-run current-alt-run alt-run-type) run-statistics
+;;     (setf max-heads-run (max current-heads-run max-heads-run)
+;;           current-heads-run 0
+;;           current-tails-run 1)
+;;     (if (null start-alt-run)
+;;         (when (eq alt-run-type :ht) (incf current-alt-run))
+;;         (setf current-alt-run 1 alt-run-type start-alt-run))))
+
+;; (defun continue-heads-run (run-statistics)
+;;   (with-slots (current-heads-run current-alt-run max-alt-run) run-statistics
+;;     (setf max-alt-run (max current-alt-run max-alt-run)
+;;           current-alt-run 0)
+;;     (incf current-heads-run)))
+
+;; (defun continue-tails-run (run-statistics)
+;;   (with-slots (current-tails-run current-alt-run max-alt-run) run-statistics
+;;     (setf max-alt-run (max current-alt-run max-alt-run)
+;;           current-alt-run 0)
+;;     (incf current-tails-run)))
+
+;; (defun finalize-stats (run-statistics)
+;;   (with-slots (current-heads-run max-heads-run current-tails-run max-tails-run current-alt-run max-alt-run) run-statistics
+;;     (unless (zerop current-heads-run)
+;;       (setf max-heads-run (max current-heads-run max-heads-run)))
+;;     (unless (zerop current-tails-run)
+;;       (setf max-tails-run (max current-tails-run max-tails-run)))
+;;     (unless (zerop current-alt-run)
+;;       (setf max-alt-run (max current-alt-run max-alt-run)))))
+  
+;; ;; (defun trial (feeder)
+;; ;;   (assert (not (exhaustedp feeder)))
+;; ;;   (let ((stats (make-instance 'run-statistics)))
+;; ;;     (labels ((start ()
+;; ;;                (ecase (feed feeder)
+;; ;;                  (:head (start-heads-run stats) (h0))
+;; ;;                  (:tail (start-tails-run stats) (t0))))
+;; ;;              (h0 ()
+;; ;;                (cond ((exhaustedp feeder) (finalize-stats stats))
+;; ;;                      (t (ecase (feed feeder)
+;; ;;                           (:head (continue-heads-run stats) (hh))
+;; ;;                           (:tail (start-tails-run stats :start-alt-run :ht) (ht)))) ))
+;; ;;              (t0 ()
+;; ;;                (cond ((exhaustedp feeder) (finalize-stats stats))
+;; ;;                      (t (ecase (feed feeder)
+;; ;;                           (:head (start-heads-run stats :start-alt-run :th) (th))
+;; ;;                           (:tail (continue-tails-run stats) (tt)))) ))
+;; ;;              (hh ()
+;; ;;                (cond ((exhaustedp feeder) (finalize-stats stats))
+;; ;;                      (t (ecase (feed feeder)
+;; ;;                           (:head (continue-heads-run stats) (hh))
+;; ;;                           (:tail (start-tails-run stats :start-alt-run :ht) (ht)))) ))
+;; ;;              (ht ()
+;; ;;                (cond ((exhaustedp feeder) (finalize-stats stats))
+;; ;;                      (t (ecase (feed feeder)
+;; ;;                           (:head (start-heads-run stats) (th))
+;; ;;                           (:tail (continue-tails-run stats) (tt)))) ))
+;; ;;              (th ()
+;; ;;                (cond ((exhaustedp feeder) (finalize-stats stats))
+;; ;;                      (t (ecase (feed feeder)
+;; ;;                           (:head (continue-heads-run stats) (hh))
+;; ;;                           (:tail (start-tails-run stats) (ht)))) ))
+;; ;;              (tt ()
+;; ;;                (cond ((exhaustedp feeder) (finalize-stats stats))
+;; ;;                      (t (ecase (feed feeder)
+;; ;;                           (:head (start-heads-run stats :start-alt-run :th) (th))
+;; ;;                           (:tail (continue-tails-run stats) (tt)))) )))
+;; ;;       (start)
+;; ;;       stats)))
+
+;; ;;;
+;; ;;;    Does this introduce weird scope for STATS?? Relies on side effect to enclosing STATS object...
+;; ;;;    
+;; (defmacro branch-on-next-toss ((feeder stats) head tail)
+;;   (let ((f (gensym))
+;;         (s (gensym)))
+;;     `(let ((,f ,feeder)
+;;            (,s ,stats))
+;;        (cond ((exhaustedp ,f) (finalize-stats ,s))
+;;              (t (let ((stats ,s))
+;;                   (ecase (feed ,f)
+;;                     ,head
+;;                     ,tail)))) )))
+
+;; (defun trial (feeder)
+;;   (assert (not (exhaustedp feeder)))
+;;   (let ((stats (make-instance 'run-statistics)))
+;;     (labels ((start ()
+;;                (ecase (feed feeder)
+;;                  (:head (start-heads-run stats) (h0))
+;;                  (:tail (start-tails-run stats) (t0))))
+;;              (h0 ()
+;;                (branch-on-next-toss (feeder stats)
+;;                  (:head (continue-heads-run stats) (hh))
+;;                  (:tail (start-tails-run stats :start-alt-run :ht) (ht))))
+;;              (t0 ()
+;;                (branch-on-next-toss (feeder stats)
+;;                  (:head (start-heads-run stats :start-alt-run :th) (th))
+;;                  (:tail (continue-tails-run stats) (tt))))
+;;              (hh ()
+;;                (branch-on-next-toss (feeder stats)
+;;                  (:head (continue-heads-run stats) (hh))
+;;                  (:tail (start-tails-run stats :start-alt-run :ht) (ht))))
+;;              (ht ()
+;;                (branch-on-next-toss (feeder stats)
+;;                  (:head (start-heads-run stats) (th))
+;;                  (:tail (continue-tails-run stats) (tt))))
+;;              (th ()
+;;                (branch-on-next-toss (feeder stats)
+;;                  (:head (continue-heads-run stats) (hh))
+;;                  (:tail (start-tails-run stats) (ht))))
+;;              (tt ()
+;;                (branch-on-next-toss (feeder stats)
+;;                  (:head (start-heads-run stats :start-alt-run :th) (th))
+;;                  (:tail (continue-tails-run stats) (tt)))) )
+;;       (start)
+;;       stats)))
+
+
+
+
+;; ;;;    Count H T T H as 2 consecutive alternating runs??
